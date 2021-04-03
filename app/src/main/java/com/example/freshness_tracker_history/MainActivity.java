@@ -1,124 +1,58 @@
 package com.example.freshness_tracker_history;
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
-import android.content.Context;
+
 import androidx.appcompat.app.AppCompatActivity;
-import org.json.JSONException;
-import org.json.JSONObject;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+import java.util.ArrayList;
 import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
     ListManager mainInventory;
     ArrayAdapter<String> arrayAdapter;
+    private static final String TAG = "MainActivity";
 
-    FileReader fileReader = null;
-    FileWriter fileWriter = null;
-    BufferedReader bufferedReader = null;
-    BufferedWriter bufferedWriter = null;
-    String response = null;
-    private static final String FILE_NAME = "food-item-list";
+    private FirebaseDatabase foodListDB;
+    private DatabaseReference foodListDBReference;
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        boolean isFilePresent = isFilePresent(getActivity(), "storage.json");
-        if(isFilePresent) {
-            String jsonString = read(getActivity(), "storage.json");
-            //do the json parsing here and do the rest of functionality of app
-        } else {
-            boolean isFileCreated = create(getActivity, "storage.json", "{}");
-            if(isFileCreated) {
-                //proceed with storing the first item
-            } else {
+        ArrayList<FoodItem> foodItemsList = new ArrayList<>();
+        // Read from the database
+        foodListDB = FirebaseDatabase.getInstance();
+        foodListDBReference = foodListDB.getReference();
+        //update array list as items are added to the database
+        ValueEventListener postListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                for (DataSnapshot postSnapshot : dataSnapshot.getChildren()) {
+                    Log.e("Get Data", postSnapshot.getValue(FoodItem.class).toString());
+                    foodItemsList.add(postSnapshot.getValue(FoodItem.class));
+                }
             }
-        }
-    }
-    private String read(Context context, String fileName) {
-        try {
-            FileInputStream fis = context.openFileInput(fileName);
-            InputStreamReader isr = new InputStreamReader(fis);
-            BufferedReader bufferedReader = new BufferedReader(isr);
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = bufferedReader.readLine()) != null) {
-                sb.append(line);
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+                Log.d(TAG, "loadPost:onCancelled", databaseError.toException());
             }
-            return sb.toString();
-        } catch (FileNotFoundException fileNotFound) {
-            return null;
-        } catch (IOException ioException) {
-            return null;
-        }
+        };
+        foodListDBReference.addValueEventListener(postListener);
     }
-    private boolean create(Context context, String fileName, String jsonString){
-        String FILENAME = "storage.json";
-        try {
-            FileOutputStream fos = context.openFileOutput(fileName,Context.MODE_PRIVATE);
-            if (jsonString != null) {
-                fos.write(jsonString.getBytes());
-            }
-            fos.close();
-            return true;
-        } catch (FileNotFoundException fileNotFound) {
-            return false;
-        } catch (IOException ioException) {
-            return false;
-        }
-    }
-    public boolean isFilePresent(Context context, String fileName) {
-        String path = context.getFilesDir().getAbsolutePath() + "/" + fileName;
-        File file = new File(path);
-        return file.exists();
-    }
-    private void createFoodItem(String name, Integer date, String category) {
-
-        JSONObject foodItem = new JSONObject();
-        try {
-            foodItem.put("Name", name);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-        try {
-            foodItem.put("Expiration Date", date);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-        try {
-            foodItem.put("Category", category);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-        // Convert JsonObject to String Format
-        String foodItemString = foodItem.toString();
-        // Define the File Path and its Name
-        File file = new File(this.getFilesDir(),FILE_NAME);
-        FileWriter fileWriter = null;
-        try {
-            fileWriter = new FileWriter(file);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
-        try {
-            bufferedWriter.write(foodItemString);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        try {
-            bufferedWriter.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    //this will later be moved to the AddFoodItemActivity
+    public void addFoodItem(Date date, String name, FoodType foodType) {
+        FoodItem foodItem = new FoodItem(date, name, foodType);
+        foodListDBReference.child("items").child(name).setValue(foodItem);
+        //using setValue overwrites the data at the specified location.
+        // to allow for multiple items with the same name, this will need to be changed
     }
 }
