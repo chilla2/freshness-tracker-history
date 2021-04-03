@@ -1,28 +1,20 @@
 package com.example.freshness_tracker_history;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
@@ -30,48 +22,39 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import android.widget.DatePicker;
 
 public class MainActivity extends AppCompatActivity {
-    EditText editTextName;
+    EditText editItemName;
     DatePicker picker;
     Spinner spinnerCategory;
     ListView listViewItems;
-    Button buttonAddItem;
-    //a list to store all the artist from firebase database
-    List<FoodItem> foodItems;
-    //our database reference object
-    DatabaseReference databaseItems;
+    List<FoodItem> foodItems;//a list to store all the artist from firebase database
+    FloatingActionButton addButton;
+    DatabaseReference databaseItems;//our database reference object
     private static final String TAG = "MainActivity";
-    private FirebaseDatabase foodListDB;
-    private DatabaseReference foodListDBReference;
-    ArrayList<FoodItem> foodItemsList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        databaseItems = FirebaseDatabase.getInstance().getReference("items");
-        //getting views
-        editTextName = (EditText) findViewById(R.id.editTextName);
-        picker=(DatePicker)findViewById(R.id.datePicker);
-        spinnerCategory = (Spinner) findViewById(R.id.categories_spinner);
+        databaseItems = FirebaseDatabase.getInstance().getReference("items");//getting the reference of items node
+        addButton = (FloatingActionButton) findViewById(R.id.addButton);
         listViewItems = (ListView) findViewById(R.id.listViewItems);
-        buttonAddItem = (Button) findViewById(R.id.buttonAddItem);
         foodItems = new ArrayList<>();//list to store food items
-
-        buttonAddItem.setOnClickListener(new View.OnClickListener() {
+        addButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view) {
-                addItem();
+            public void onClick(View v) {
+                System.out.println("Button Clicked");
+                Log.d(TAG, "Switching to add item activity");
+                switchToAddItem();
             }
         });
-        listViewItems.setOnItemClickListener(new AdapterView.OnItemClickListener() {//attaching listener to listview
+        listViewItems.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                FoodItem foodItem = foodItems.get(i);//getting the selected item
+                FoodItem foodItem = foodItems.get(i); //getting the selected item
             }
         });
         listViewItems.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
@@ -83,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
     private void showUpdateDeleteDialog(final String itemId, String itemName) {
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
         LayoutInflater inflater = getLayoutInflater();
@@ -117,57 +101,69 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    private void switchToAddItem() {
+        Intent switchToAddItemIntent = new Intent(this, AddItemActivity.class);
+        startActivity(switchToAddItemIntent);
+    }
+
     private boolean updateItem(String id, int day, int month, int year, String name, String category) {
         DatabaseReference dR = FirebaseDatabase.getInstance().getReference("items").child(id);//getting the specified item reference
-        FoodItem foodItem = new FoodItem(id, day, month, year, name, category);//updating item
+        FoodItem foodItem = new FoodItem(id, day, month, year, name, category); //updating item
         dR.setValue(foodItem);
         Toast.makeText(getApplicationContext(), "Item Updated", Toast.LENGTH_LONG).show();
         return true;
     }
+
     private boolean deleteItem(String id) {
         DatabaseReference dR = FirebaseDatabase.getInstance().getReference("items").child(id);//getting the specified item reference
-        dR.removeValue();//removing item
+        dR.removeValue(); //removing item
         Toast.makeText(getApplicationContext(), "Item Deleted", Toast.LENGTH_LONG).show();
         return true;
     }
+
     @Override
     protected void onStart() {
         super.onStart();
-        databaseItems.addValueEventListener(new ValueEventListener() { //attaching value event listener
+        Log.d(TAG, "Calling onStart method");
+        databaseItems.addValueEventListener(new ValueEventListener() {//attaching value event listener
             @Override
             public void onDataChange(DataSnapshot dataSnapshot) {
-                foodItems.clear();//clearing the previous items list
-                for (DataSnapshot postSnapshot : dataSnapshot.getChildren()) {//iterating through all the nodes
-                    FoodItem foodItem = postSnapshot.getValue(FoodItem.class);//getting item
-                    foodItems.add(foodItem);//adding item to the list
+                Log.d(TAG, "Calling onDataChange method");
+                List<FoodItem> workingList = loopThroughDBAndAddToList(dataSnapshot);//Call function to iterate through DB nodes and add items to list
+                if (!(workingList.size() == 0)) {
+                    Log.d(TAG, "Working list is not empty");
+                } else {
+                    Log.d(TAG, "Working list is empty");
                 }
-                FoodItemsList artistAdapter = new FoodItemsList(MainActivity.this, foodItems);//creating adapter
-                listViewItems.setAdapter(artistAdapter);//attaching adapter to the listview
+                FoodItemsList itemAdapter = new FoodItemsList(MainActivity.this, workingList);//creating adapter
+                Log.d(TAG, "Attaching adapter to listViewItems");
+                listViewItems.setAdapter(itemAdapter);
             }
             @Override
             public void onCancelled(DatabaseError databaseError) {
             }
         });
     }
+
+    public List<FoodItem> loopThroughDBAndAddToList(DataSnapshot dataSnapshot) {//This method is called in the onDataChange method (in onStart)
+        foodItems.clear();
+        for (DataSnapshot postSnapshot : dataSnapshot.getChildren()) {//iterating through all the nodes
+            FoodItem foodItem = postSnapshot.getValue(FoodItem.class);//getting item
+            Log.d(TAG, "Adding item to list");//adding item to the list
+            foodItems.add(foodItem);
+        }
+        return foodItems;
+    }
+
     /*
      * This method is saving a new item to the
      * Firebase Realtime Database
      * */
-    private void addItem() {
-        //getting the values to save
-        String name = editTextName.getText().toString().trim();
-        int day = picker.getDayOfMonth();
-        int month = picker.getMonth();
-        int year = picker.getYear();
-        String category = spinnerCategory.getSelectedItem().toString();
-        if (!TextUtils.isEmpty(name)) { //checking if the value is provided
-            String id = databaseItems.push().getKey();//getting a unique id using push().getKey() method
-            FoodItem foodItem = new FoodItem(id, day, month, year, name, category);//creating an item Object
-            databaseItems.child(id).setValue(foodItem); //Saving the item
-            editTextName.setText(""); //setting edittext to blank again
-            Toast.makeText(this, "Item added", Toast.LENGTH_LONG).show();//displaying a success toast
-        } else {
-            Toast.makeText(this, "Please enter a name", Toast.LENGTH_LONG).show();//if the value is not given displaying a toast
-        }
+    private void addItem(String name, int day, int month, int year, String category) {
+        String id = databaseItems.push().getKey();
+        FoodItem foodItem = new FoodItem(id, day, month, year, name, category);//creating an item Object
+        databaseItems.child(id).setValue(foodItem);//Saving the item
+        Toast.makeText(this, "Item added", Toast.LENGTH_LONG).show();
     }
 }
